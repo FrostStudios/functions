@@ -1,0 +1,132 @@
+#PARALLELISIERUNG avxsqrt
++ INTELLECTUAL PROPERTY OF FRANK HERGET, 27.02.1976
++ NO RE-USE IN COMMERCIAL PRODUCTS WITHOUT LICENSE
+
+#include <immintrin.h>
+#include <stdio.h>
+#include <math.h>
+#include <time.h>
+#include <pthread.h>
+
+#define CLUSTER_SIZE 81  // 9x9 Cluster
+#define WORK_PER_NODE 1024  // Aufgaben pro virtuellem Node
+#define NUM_THREADS 8  // Parallelität = AVX-Vektor-Größe
+
+// Cluster-Aufgabenstruktur
+typedef struct {
+    int node_id;
+    float input_data[WORK_PER_NODE];
+    float output_data[WORK_PER_NODE];
+    double processing_time;
+} cluster_node_t;
+
+// Globaler Cluster
+cluster_node_t virtual_cluster[CLUSTER_SIZE];
+
+// AVX-optimierte SQRT + Matrix-Transformation
+void process_node_avx(cluster_node_t* node) {
+    uint64_t start = __rdtsc();
+    
+    // AVX-Parallelverarbeitung (8 Werte gleichzeitig)
+    for (int i = 0; i < WORK_PER_NODE; i += 8) {
+        if (i + 8 <= WORK_PER_NODE) {
+            __m256 data = _mm256_loadu_ps(&node->input_data[i]);
+            
+            // Quadratwurzel + zusätzliche Transformation
+            __m256 sqrt_val = _mm256_sqrt_ps(data);
+            __m256 enhanced = _mm256_mul_ps(sqrt_val, 
+                _mm256_set1_ps(1.41421356237f)); // * sqrt(2)
+            
+            _mm256_storeu_ps(&node->output_data[i], enhanced);
+        }
+    }
+    
+    // Restliche Werte seriell verarbeiten
+    for (int i = WORK_PER_NODE - (WORK_PER_NODE % 8); i < WORK_PER_NODE; i++) {
+        node->output_data[i] = sqrtf(node->input_data[i]) * 1.41421356237f;
+    }
+    
+    node->processing_time = (double)(__rdtsc() - start);
+}
+
+// Thread-Funktion für parallele Cluster-Verarbeitung
+void* cluster_worker(void* arg) {
+    int thread_id = *(int*)arg;
+    
+    // Jeder Thread bearbeitet seinen Teil des Clusters
+    for (int node = thread_id; node < CLUSTER_SIZE; node += NUM_THREADS) {
+        // Daten initialisieren (simulierte Workload)
+        for (int i = 0; i < WORK_PER_NODE; i++) {
+            virtual_cluster[node].input_data[i] = 
+                (float)((node * WORK_PER_NODE + i + 1) * 2.0f);
+        }
+        
+        virtual_cluster[node].node_id = node;
+        process_node_avx(&virtual_cluster[node]);
+    }
+    
+    return NULL;
+}
+
+int main() {
+    printf("=== VIRTUAL 9² CLUSTER MIT AVX-PARALLELISIERUNG ===\n");
+    printf("Cluster Topologie: 9x9 Nodes (%d total)\n", CLUSTER_SIZE);
+    printf("Work per Node: %d tasks\n", WORK_PER_NODE);
+    printf("Total Tasks: %ld\n", (long)CLUSTER_SIZE * WORK_PER_NODE);
+    printf("Parallel Threads: %d\n\n", NUM_THREADS);
+    
+    // Thread-Management
+    pthread_t threads[NUM_THREADS];
+    int thread_ids[NUM_THREADS];
+    
+    clock_t cluster_start = clock();
+    
+    // Cluster parallel starten
+    for (int i = 0; i < NUM_THREADS; i++) {
+        thread_ids[i] = i;
+        pthread_create(&threads[i], NULL, cluster_worker, &thread_ids[i]);
+    }
+    
+    // Auf Beendigung warten
+    for (int i = 0; i < NUM_THREADS; i++) {
+        pthread_join(threads[i], NULL);
+    }
+    
+    double total_time = ((double)(clock() - cluster_start)) / CLOCKS_PER_SEC;
+    
+    // Ergebnisse analysieren
+    double total_cycles = 0;
+    double max_node_time = 0;
+    int fastest_node = 0, slowest_node = 0;
+    
+    for (int i = 0; i < CLUSTER_SIZE; i++) {
+        total_cycles += virtual_cluster[i].processing_time;
+        if (virtual_cluster[i].processing_time > max_node_time) {
+            max_node_time = virtual_cluster[i].processing_time;
+            slowest_node = i;
+        }
+        if (virtual_cluster[i].processing_time < virtual_cluster[fastest_node].processing_time) {
+            fastest_node = i;
+        }
+    }
+    
+    printf("=== CLUSTER PERFORMANCE RESULTS ===\n");
+    printf("Total Processing Time: %.3f seconds\n", total_time);
+    printf("Average Node Time: %.0f cycles\n", total_cycles / CLUSTER_SIZE);
+    printf("Fastest Node: %d (%.0f cycles)\n", fastest_node, virtual_cluster[fastest_node].processing_time);
+    printf("Slowest Node: %d (%.0f cycles)\n", slowest_node, virtual_cluster[slowest_node].processing_time);
+    printf("Load Balance: %.2f%% efficiency\n", 
+           (virtual_cluster[fastest_node].processing_time / max_node_time) * 100);
+    
+    // Verifikation anzeigen
+    printf("\n=== SAMPLE RESULTS (Node 0) ===\n");
+    for (int i = 0; i < 5; i++) {
+        printf("Task %d: sqrt(%.1f)*√2 = %.3f\n", 
+               i, virtual_cluster[0].input_data[i], virtual_cluster[0].output_data[i]);
+    }
+    
+    printf("\nThroughput: %.0f tasks/second\n", 
+           (CLUSTER_SIZE * WORK_PER_NODE) / total_time);
+    
+    return 0;
+}
