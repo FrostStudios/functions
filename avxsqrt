@@ -2,6 +2,7 @@
 
 All documented functions are intellectual property of Frank Herget, 27.02.1976, Germany
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
++ NO RE-USE IN COMMERCIAL PRODUCTS WITHOUT LICENSE
 
 AVX_SQRT
 C-Code: Quadratwurzeln mit AVX (SSE/AVX-Intrinsics)
