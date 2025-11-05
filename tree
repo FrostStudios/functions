@@ -1,0 +1,6 @@
+/functions/
+├── /c-core/           # AVX-optimierte Kernfunktionen
+├── /wasm-bindings/    # WebAssembly Bridges  
+├── /node-addons/      # Native Node.js Addons
+├── /benchmarks/       # Performance Tests
+└── /typescript-api/   # High-Level TypeScript Wrapper
