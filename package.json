@@ -1,0 +1,15 @@
+{
+  "name": "frost-functions",
+  "version": "1.0.0",
+  "scripts": {
+    "install": "node-gyp rebuild",
+    "build:native": "cd src/native && node-gyp configure build",
+    "benchmark": "node benchmarks/teraops.js"
+  },
+  "gypfile": true,
+  "files": [
+    "src/native/binding.gyp",
+    "src/native/math_avx.c",
+    "src/utils/math.avx.ts"
+  ]
+}
